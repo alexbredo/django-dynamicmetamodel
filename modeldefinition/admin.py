@@ -16,7 +16,8 @@ class NumberValueAdmin(PolymorphicChildModelAdmin):
 class StringValueAdmin(PolymorphicChildModelAdmin):
     base_model = StringValue
     show_in_index = False
-
+    form = forms.StringValueForm
+    
 
 @admin.register(AbstractValue)
 class AbstractValueParentAdmin(PolymorphicParentModelAdmin):
