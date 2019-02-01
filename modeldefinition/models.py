@@ -12,7 +12,7 @@ To do:
  - implement Referenced Variable (lookup by class & property)
  - implement ChoiceValue out of selected class + field (key, value)
  - implement Unit for NumericValue (via subclass or additional features)
- - Problemstellung: 
+ - add existing fields to (other) classes
 '''
 
 
@@ -27,21 +27,11 @@ class DynamicClass(PolymorphicModel):
         return self.name
 
 
-class Field(models.Model):
-    # result möglicherweise nicht unbedingt notwendig!
-    CONSTRAINTS = Choices('required', 'optional', 'result')
-
+class Field(PolymorphicModel):
+    dynamic_class = models.ForeignKey(
+        'DynamicClass', on_delete=models.CASCADE, related_name='classfields') 
     name = models.CharField(max_length=255, blank=False,
                             null=False)
-    constraint = models.CharField(
-        choices=CONSTRAINTS, default=CONSTRAINTS.required, max_length=100)
-
-    limit = models.Q(app_label='modeldefinition', model__startswith='value') & \
-        ~models.Q(app_label='modeldefinition', model='value')
-    content_type = models.ForeignKey(
-        ContentType, on_delete=models.CASCADE, related_name="fields", limit_choices_to=limit)
-    dynamic_class = models.ForeignKey(
-        'DynamicClass', on_delete=models.CASCADE, null=True, blank=True, related_name='required_fields')
 
     class Meta:
         unique_together = ('name', 'dynamic_class', )
@@ -54,6 +44,25 @@ class Field(models.Model):
         if self.dynamic_class:
             return f'{self.name} ({self.dynamic_class.name})'
         return f'{self.name} (Global)'
+
+
+class FieldValue(Field):
+    value = models.ForeignKey(
+        'AbstractValue', on_delete=models.CASCADE, related_name='fieldvalues')
+
+
+class FieldCustom(Field):
+    limit = models.Q(app_label='modeldefinition', model__startswith='value') & \
+        ~models.Q(app_label='modeldefinition', model='value')
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE, limit_choices_to=limit)
+    default_value = models.ForeignKey(
+        'AbstractValue', on_delete=models.SET_NULL, null=True, blank=True)
+    # result möglicherweise nicht unbedingt notwendig!
+    #CONSTRAINTS = Choices('required', 'optional', 'result')
+
+    #constraint = models.CharField(
+    #    choices=CONSTRAINTS, default=CONSTRAINTS.required, max_length=100)
 
 
 class DynamicObject(models.Model):
@@ -105,6 +114,10 @@ class ValuePointer(AbstractValue):
 
     def __str__(self):
         return f"{self.value_reference}"
+
+# Lookup Value by Class, Field
+# Job src=C: (viele jobs, welcher?)
+# Task ref src = (Job src)
 
 
 class ValueNumber(AbstractValue):

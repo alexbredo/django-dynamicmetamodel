@@ -8,23 +8,32 @@ from . import models
 from . import forms
 
 
+class FieldInline(StackedPolymorphicInline):
+    class FieldValueInline(StackedPolymorphicInline.Child):
+        model = models.FieldValue
+        #autocomplete_fields = ['value']
+        #form = forms.ValueStringForm
 
-class FieldInlineAdmin(admin.TabularInline):
+    class FieldCustomInline(StackedPolymorphicInline.Child):
+        model = models.FieldCustom
+        #form = forms.ValuePointerForm
+
     model = models.Field
-    extra = 0
+    child_inlines = (
+        FieldCustomInline,
+        FieldValueInline
+    )
+
+
+""" class FieldInlineAdmin(admin.TabularInline):
+    model = models.Field
+    extra = 0 """
 
 
 @admin.register(models.DynamicClass)
 class DynamicClassAdmin(PolymorphicInlineSupportMixin, admin.ModelAdmin):
-    inlines = [FieldInlineAdmin]  
+    inlines = [FieldInline]  
     # filter_horizontal = ('related',)
-
-
-@admin.register(models.Field)
-class FieldAdmin(admin.ModelAdmin):
-    list_display = ('dynamic_class', 'name', 'content_type', 'constraint', ) 
-    list_filter = ('content_type', 'constraint', )
-    search_fields = ('name', 'content_type__model', 'dynamic_class__name', )
 
 
 class ValueInlineFormset(BasePolymorphicInlineFormSet): # BaseInlineFormSet
@@ -34,16 +43,16 @@ class ValueInlineFormset(BasePolymorphicInlineFormSet): # BaseInlineFormSet
         #    return
 
         print('FIRE---------------FIRE')
-        form_fields = [form.cleaned_data['field'] for form in self.forms]
+        #form_fields = [form.cleaned_data['field'] for form in self.forms]
 
         # Check 1: Missing fields
-        missing = models.Field.objects.filter(dynamic_class=self.instance.dynamic_class).exclude(name__in=form_fields)
-        missing_str = ', '.join([f'{field.name} ({field.content_type})' for field in missing])
-        print (missing)
+        #missing = models.Field.objects.filter(dynamic_class=self.instance.dynamic_class).exclude(name__in=form_fields)
+        #missing_str = ', '.join([f'{field.name} ({field.content_type})' for field in missing])
+        #print (missing)
 
         # Check 2: Too many fields
-        too_many = models.Field.objects.filter(dynamic_class=self.instance.dynamic_class).filter(name__in=form_fields)
-        print(too_many)
+        #too_many = models.Field.objects.filter(dynamic_class=self.instance.dynamic_class).filter(name__in=form_fields)
+        #print(too_many)
         # todo
         #raise forms.ValidationError("Missing fields: " + missing_str)
 
@@ -119,3 +128,24 @@ class ValueParentAdmin(PolymorphicParentModelAdmin):
     list_display = ('id', 'element', 'field', 'polymorphic_ctype', '__str__')
     list_filter = (PolymorphicChildModelFilter,)
     search_fields = ['field__name']
+
+
+@admin.register(models.FieldCustom)
+class FieldCustomAdmin(PolymorphicChildModelAdmin):
+    base_model = models.FieldCustom
+    show_in_index = False
+
+
+@admin.register(models.FieldValue)
+class FieldValueAdmin(PolymorphicChildModelAdmin):
+    base_model = models.FieldValue
+    show_in_index = False
+
+
+@admin.register(models.Field)
+class FieldParentAdmin(PolymorphicParentModelAdmin):
+    base_model = models.Field
+    child_models = (models.FieldCustom, models.FieldValue)
+    list_display = ('id', 'name', 'dynamic_class', 'polymorphic_ctype', )
+    list_filter = (PolymorphicChildModelFilter,)
+    search_fields = ['name', 'dynamic_class__name']
