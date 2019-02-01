@@ -1,4 +1,4 @@
-from . import models
+from modeldefinition import models
 from django.core.exceptions import ValidationError
 from django import forms
 
@@ -6,21 +6,26 @@ from django import forms
 class ValueNumberForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['dynamic_variable'].queryset = models.DynamicVariable.objects.filter(content_type__model='valuenumber')
-        
+        self.fields['field'].queryset = models.Field.objects.filter(
+            content_type__model='valuenumber')
+
 
 class ValueStringForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['dynamic_variable'].queryset = models.DynamicVariable.objects.filter(content_type__model='valuestring')
+        self.fields['field'].queryset = models.Field.objects.filter(
+            content_type__model='valuestring')
 
 
 class ValueObjectForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['dynamic_variable'].queryset = models.DynamicVariable.objects.filter(content_type__model='valueobject')
+        self.fields['field'].queryset = models.Field.objects.filter(
+            content_type__model='valueobject')
 
 
-class ValueForm(forms.ModelForm):
+class ValuePointerForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['field'].queryset = models.Field.objects.filter(
+            content_type__model='valuepointer')

@@ -5,18 +5,20 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from ordered_model.models import OrderedModel
 from django.core.exceptions import ValidationError
 from model_utils import Choices
-#from model_utils.managers import InheritanceManager
+
+'''
+To do:
+ - inherit from TimeStampedModel
+ - implement Referenced Variable (lookup by class & property)
+ - implement ChoiceValue out of selected class + field (key, value)
+ - implement Unit for NumericValue (via subclass or additional features)
+ - Problemstellung: 
+'''
 
 
-# Idee: clean in dem modell aufrufen, wo es validiert werden soll
-
-# inherit from TimeStampedModel
-
-class DynamicClass(models.Model):
-    name = models.CharField(max_length=255, blank=False, null=False, unique=True)
-    related = models.ManyToManyField('self', symmetrical=True)
-    # required_variables (related name)
-    # many tasks (task is another class) select
+class DynamicClass(PolymorphicModel):
+    name = models.CharField(max_length=255, blank=False,
+                            null=False, unique=True)
 
     class Meta:
         verbose_name_plural = "dynamic classes"
@@ -25,144 +27,145 @@ class DynamicClass(models.Model):
         return self.name
 
 
-class DynamicVariable(models.Model):
-    CONSTRAINTS = Choices('required', 'optional', 'result') # result möglicherweise nicht unbedingt notwendig!
+class Field(models.Model):
+    # result möglicherweise nicht unbedingt notwendig!
+    CONSTRAINTS = Choices('required', 'optional', 'result')
 
-    dynamic_class = models.ForeignKey('DynamicClass', on_delete=models.CASCADE, null=False, related_name='required_variables')
-    name = models.CharField(max_length=255, blank=False, null=False)
-    # Limit to all subclasses of Value (value* ?)
+    name = models.CharField(max_length=255, blank=False,
+                            null=False)
+    constraint = models.CharField(
+        choices=CONSTRAINTS, default=CONSTRAINTS.required, max_length=100)
+
     limit = models.Q(app_label='modeldefinition', model__startswith='value') & \
         ~models.Q(app_label='modeldefinition', model='value')
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="fields", limit_choices_to=limit)
-    constraint = models.CharField(choices=CONSTRAINTS, default=CONSTRAINTS.required, max_length=100)
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE, related_name="fields", limit_choices_to=limit)
+    dynamic_class = models.ForeignKey(
+        'DynamicClass', on_delete=models.CASCADE, null=True, blank=True, related_name='required_fields')
 
     class Meta:
         unique_together = ('name', 'dynamic_class', )
-        ordering = ('dynamic_class', 'name', )
+        ordering = ('name', 'dynamic_class')
         indexes = [
             models.Index(fields=['dynamic_class', 'name']),
         ]
 
     def __str__(self):
-        return f'{self.name} ({self.dynamic_class.name})'
-
-
-#class ObjectVariable(models.Model):
-#    dynamic_object = models.ForeignKey('DynamicObject', on_delete=models.CASCADE, null=False)
-#    dynamic_variable = models.ForeignKey('DynamicVariable', on_delete=models.CASCADE, null=False)
-#    value = models.ForeignKey('Value', on_delete=models.CASCADE, null=False)
+        if self.dynamic_class:
+            return f'{self.name} ({self.dynamic_class.name})'
+        return f'{self.name} (Global)'
 
 
 class DynamicObject(models.Model):
-    dynamic_class = models.ForeignKey('DynamicClass', on_delete=models.CASCADE, null=False)
-    variables = models.ManyToManyField('DynamicVariable', through='Value', through_fields=('dynamic_object', 'dynamic_variable'))
+    dynamic_class = models.ForeignKey(
+        'DynamicClass', on_delete=models.CASCADE, null=False)
+    elements = models.ManyToManyField(
+        'Field', through='AbstractValue', through_fields=('element', 'field'))
 
     def __str__(self):
-        return f'{self.dynamic_class.name}-Object-{self.id}'
+        return f'{self.dynamic_class.name}-Object-{self.pk}'
 
 
-class Value(PolymorphicModel):
-    dynamic_object = models.ForeignKey('DynamicObject', on_delete=models.CASCADE, null=False) # vorher: job
-    dynamic_variable = models.ForeignKey('DynamicVariable', on_delete=models.PROTECT, null=False)  # todo: limit_choices_to=get_contenttype_choices
-    #objects = InheritanceManager()
+class AbstractValue(PolymorphicModel):
+    element = models.ForeignKey(
+        'DynamicObject', on_delete=models.CASCADE, null=True, blank=True)
+    # todo: limit_choices_to=get_contenttype_choices
+    field = models.ForeignKey(
+        'Field', on_delete=models.PROTECT, null=True, blank=True)
+    # Problem: ValueNumber benötigt {element, field}, sonst sinnlos (da keinerlei Zugehörigkeit)
 
     class Meta:
-        unique_together = ('dynamic_object', 'dynamic_variable',)
-        # abstract = True
-        # Geht nicht, weil dann das Model im Admin nicht registriert werden kann
-        # Ist aber nicht schlimm, da im Admin nur bestimmte Typen erlaubt werden
+        #abstract = True # could not register with admin, if abstract
+        unique_together = ('element', 'field', )
 
     def __str__(self):
         instance = self.get_real_instance()
         if self.__str__ != instance.__str__:
             return str(self.get_real_instance())
         return str(super())
-    
+
     '''
     @staticmethod
     def get_contenttype_choices():
-        for cls in Value.__subclasses__():
+        for cls in AbstractValue.__subclasses__():
             print(cls)
 
-        query_a = DynamicVariable.objects.filter(field_type=ContentType.objects.get_for_model(Value).model)
+        query_a = Field.objects.filter(field_type=ContentType.objects.get_for_model(AbstractValue).model)
         return { 'fields': query_a }
     '''
 
-class ValueNumber(Value):
+'''
+class SimpleValue(AbstractValue):
+    pass
+'''
+
+class ValuePointer(AbstractValue):
+    value_reference = models.ForeignKey(
+        'DynamicObject', on_delete=models.CASCADE, null=True, blank=True, related_name='valuepointers')
+
+    def __str__(self):
+        return f"{self.value_reference}"
+
+
+class ValueNumber(AbstractValue):
     value = models.FloatField()
-    
-    def __init__(self, *args, **kwargs):
-        super(ValueNumber, self).__init__(*args, **kwargs)
 
     def __str__(self):
         return f"{self.value}"
 
 
-class ValueString(Value):
+class ValueString(AbstractValue):
     value = models.CharField(max_length=255)
 
     def __str__(self):
-        return f"{self.value}"
+        return f"{self.field.name} ({self.element}) = {self.value}"
 
 
-class ValueObject(Value):
-    value = models.ForeignKey('DynamicObject', on_delete=models.CASCADE, null=False)
-
-    def __str__(self):
-        return f"{self.value}"
-
-
-#class ValueFloat(Value):
+# class ValueFloat(AbstractValue):
 #    value = models.FloatField()
 
 
-#class ValueImage(Value):
+# class ValueImage(AbstractValue):
 #    value = models.ImageField(upload_to='temp')
-
-# todo ChoiceValue out of selected namespace + field 
-# Evtl. TupleChoiceValue (index + name), List, Object
-
 
 
 ###############################################################################################################
-
-class Task(models.Model):
+""" class Task(models.Model):
     name = models.CharField(max_length=255, blank=False, null=False, unique=True)
-    params = models.ManyToManyField(DynamicVariable, through='TaskParameter', through_fields=('task', 'field'))
+    params = models.ManyToManyField(Field, through='TaskParameter', through_fields=('task', 'field'))
 
     def __str__(self):
-        return self.name
+        return self.name """
 
 
-class TaskParameter(models.Model):
+""" class TaskParameter(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, null=False)
-    field = models.ForeignKey(DynamicVariable, on_delete=models.CASCADE, null=False)
+    field = models.ForeignKey(Field, on_delete=models.CASCADE, null=False)
     # filtern: nach variablen, die zur spezifischen "DynamicClass" gehören
 
     class Meta:
         unique_together = ('task', 'field',)
 
     def __str__(self):
-        return f'{self.task.name}-{self.field.name}'
+        return f'{self.task.name}-{self.field.name}' """
 
 
-class JobTemplate(DynamicClass):
+""" class JobTemplate(DynamicClass):
     tasks = models.ManyToManyField(Task, through='JobTemplateTask', through_fields=('job_template', 'task'))
     
     def __str__(self):
-        return self.name
-
-    '''
+        return self.name 
+    
     def get_required_fields(self):
         fields = list()
         for task in self.tasks.all():
             for param in task.params.filter(taskparameter__category=1):
                 fields.append(param.name)
         return set(fields)
-    '''
+"""
 
 
-class JobTemplateTask(OrderedModel):
+""" class JobTemplateTask(OrderedModel):
     job_template = models.ForeignKey('JobTemplate', on_delete=models.CASCADE, null=False)
     task = models.ForeignKey('Task', on_delete=models.CASCADE, null=False)
     order_with_respect_to = 'job_template'
@@ -171,12 +174,12 @@ class JobTemplateTask(OrderedModel):
         ordering = ('job_template', 'order')
 
     def __str__(self):
-        return f'{self.job_template.name}-{self.task.name}'
+        return f'{self.job_template.name}-{self.task.name}' """
 
 
-class Job(DynamicObject):
+""" class Job(DynamicObject):
     # Instance / Object
     #job_template = models.ForeignKey(JobTemplate, on_delete=models.PROTECT, null=False) 
-    #values = models.ManyToManyField(DynamicVariable, through='Value', through_fields=('job', 'field'))
+    #values = models.ManyToManyField(Field, through='AbstractValue', through_fields=('job', 'field'))
     class Meta:
-            proxy = True
+            proxy = True """

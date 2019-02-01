@@ -4,24 +4,24 @@ from polymorphic.admin import PolymorphicParentModelAdmin, PolymorphicChildModel
 from ordered_model.admin import OrderedTabularInline, OrderedInlineModelAdminMixin
 from django.forms.models import BaseInlineFormSet
 from polymorphic.formsets import BasePolymorphicInlineFormSet
-#from .models import Value, ValueNumber, ValueString, DynamicVariable, Record, Namespace
 from . import models
 from . import forms
 
 
-class DynamicVariableInline(admin.TabularInline):
-    model = models.DynamicVariable
+
+class FieldInlineAdmin(admin.TabularInline):
+    model = models.Field
     extra = 0
 
 
 @admin.register(models.DynamicClass)
-class DynamicClassAdmin(admin.ModelAdmin):
-    inlines = [DynamicVariableInline]  
-    filter_horizontal = ('related',)
+class DynamicClassAdmin(PolymorphicInlineSupportMixin, admin.ModelAdmin):
+    inlines = [FieldInlineAdmin]  
+    # filter_horizontal = ('related',)
 
 
-@admin.register(models.DynamicVariable)
-class DynamicVariableAdmin(admin.ModelAdmin):
+@admin.register(models.Field)
+class FieldAdmin(admin.ModelAdmin):
     list_display = ('dynamic_class', 'name', 'content_type', 'constraint', ) 
     list_filter = ('content_type', 'constraint', )
     search_fields = ('name', 'content_type__model', 'dynamic_class__name', )
@@ -34,15 +34,15 @@ class ValueInlineFormset(BasePolymorphicInlineFormSet): # BaseInlineFormSet
         #    return
 
         print('FIRE---------------FIRE')
-        form_fields = [form.cleaned_data['dynamic_variable'] for form in self.forms]
+        form_fields = [form.cleaned_data['field'] for form in self.forms]
 
         # Check 1: Missing fields
-        missing = models.DynamicVariable.objects.filter(dynamic_class=self.instance.dynamic_class).exclude(name__in=form_fields)
+        missing = models.Field.objects.filter(dynamic_class=self.instance.dynamic_class).exclude(name__in=form_fields)
         missing_str = ', '.join([f'{field.name} ({field.content_type})' for field in missing])
         print (missing)
 
         # Check 2: Too many fields
-        too_many = models.DynamicVariable.objects.filter(dynamic_class=self.instance.dynamic_class).filter(name__in=form_fields)
+        too_many = models.Field.objects.filter(dynamic_class=self.instance.dynamic_class).filter(name__in=form_fields)
         print(too_many)
         # todo
         #raise forms.ValidationError("Missing fields: " + missing_str)
@@ -57,21 +57,18 @@ class ValueInline(StackedPolymorphicInline):
         model = models.ValueString
         form = forms.ValueStringForm
 
-    class ValueObjectInline(StackedPolymorphicInline.Child):
-        model = models.ValueObject
-        form = forms.ValueObjectForm
+    class ValuePointerInline(StackedPolymorphicInline.Child):
+        model = models.ValuePointer
+        form = forms.ValuePointerForm
+        autocomplete_fields = ['value_reference']
 
-    model = models.Value
+    model = models.AbstractValue
     child_inlines = (
         ValueNumberInline,
         ValueStringInline,
-        ValueObjectInline
+        ValuePointerInline
     )
     formset = ValueInlineFormset
-
-#class ObjectVariableInline(admin.TabularInline):
-#    model = models.ObjectVariable
-#    extra = 0
 
 
 @admin.register(models.DynamicObject)
@@ -79,47 +76,11 @@ class DynamicObjectAdmin(PolymorphicInlineSupportMixin, admin.ModelAdmin):
     inlines = [ValueInline] 
     list_display = ("id", "dynamic_class")
     extra = 0
-
-
-class TaskParametersInline(admin.TabularInline):
-    model = models.TaskParameter
-    extra = 0
-
-
-@admin.register(models.Task)
-class TaskAdmin(admin.ModelAdmin):
-    list_display = ("name",)
-    inlines = [TaskParametersInline, ]
-    
-
-
-class JobTemplateTabularInline(OrderedTabularInline):
-    model = models.JobTemplateTask
-    fields = ('task', 'order', 'move_up_down_links',)
-    readonly_fields = ('order', 'move_up_down_links',)
-    extra = 1
-    ordering = ('order',)
-
-
-@admin.register(models.JobTemplate)
-class JobTemplateAdmin(OrderedInlineModelAdminMixin, admin.ModelAdmin):
-    list_display = ('name', )
-    inlines = (JobTemplateTabularInline, )
-
-
-@admin.register(models.JobTemplateTask)
-class JobTemplateTaskAdmin(admin.ModelAdmin):
-    pass   
-
-
-@admin.register(models.Job)
-class JobAdmin(PolymorphicInlineSupportMixin, admin.ModelAdmin):
-    list_display = ("id", "dynamic_class")
-    inlines = (ValueInline,)
-    extra = 0
-
-# Im Job sollen nur die Felder angezeigt werden, die der Task auch benötigt.
-# Andere Überlegeung: die Felder, die im JobTemplate () definiert werden. 
+    base_model = models.DynamicObject
+    child_models = (models.ValueNumber, models.ValueString, models.ValuePointer)
+    list_display = ('id', 'dynamic_class', '__str__')
+    #list_filter = (PolymorphicChildModelFilter,)
+    search_fields = ['id', 'dynamic_class', '__str__']
 
 
 @admin.register(models.ValueNumber)
@@ -133,57 +94,28 @@ class ValueNumberAdmin(PolymorphicChildModelAdmin):
 class ValueStringAdmin(PolymorphicChildModelAdmin):
     base_model = models.ValueString
     show_in_index = False
-    form = forms.ValueStringForm
+    form = forms.ValueStringForm 
 
 
-@admin.register(models.ValueObject)
-class ValueObjectAdmin(PolymorphicChildModelAdmin):
-    base_model = models.ValueObject
+@admin.register(models.ValuePointer)
+class ValuePointerAdmin(PolymorphicChildModelAdmin):
+    base_model = models.ValuePointer
     show_in_index = False
-    form = forms.ValueObjectForm
+    form = forms.ValuePointerForm 
+    autocomplete_fields = ['value_reference']
 
 
-@admin.register(models.Value)
+#@admin.register(models.ValueObject)
+#class ValueObjectAdmin(PolymorphicChildModelAdmin):
+#    base_model = models.ValueObject
+#    show_in_index = False
+#    form = forms.ValueObjectForm
+
+
+@admin.register(models.AbstractValue)
 class ValueParentAdmin(PolymorphicParentModelAdmin):
-    """ The parent model admin """
-    base_model = models.Value
-    child_models = (models.ValueNumber, models.ValueString)
-    list_display = ('id', 'dynamic_object', 'dynamic_variable', 'polymorphic_ctype', '__str__')
+    base_model = models.AbstractValue
+    child_models = (models.ValueNumber, models.ValueString, models.ValuePointer)
+    list_display = ('id', 'element', 'field', 'polymorphic_ctype', '__str__')
     list_filter = (PolymorphicChildModelFilter,)
-    form = forms.ValueForm
-
-
-'''
-
-
-
-
-#class ValueInline(admin.TabularInline, PolymorphicInlineSupportMixin):
-#    model = KeyValuePair
-#    #max_num = 1
-#    extra = 0
-
-
-@admin.register(Record)
-class RecordAdmin(PolymorphicInlineSupportMixin, admin.ModelAdmin):
-    inlines = (ValueInline,)
-    extra = 0
-
-
-@admin.register(Namespace)
-class NamespaceAdmin(admin.ModelAdmin):
-    pass 
-
-
-
-
-'''
-
-'''
-# https://github.com/bfirsh/django-ordered-model (Inline auch verfügbar)
-from ordered_model.admin import OrderedModelAdmin
-
-@admin.register(DynamicVariable)
-class ItemAdmin(OrderedModelAdmin):
-    list_display = ('name', 'move_up_down_links')
-'''
+    search_fields = ['field__name']

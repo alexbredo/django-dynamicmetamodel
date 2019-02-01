@@ -1,2 +1,4 @@
 Django
 django-polymorphic
+django-ordered-model
+django-model-utils
