@@ -29,7 +29,7 @@ class DynamicClass(PolymorphicModel):
 
 class Field(PolymorphicModel):
     dynamic_class = models.ForeignKey(
-        'DynamicClass', on_delete=models.CASCADE, related_name='classfields') 
+        'DynamicClass', on_delete=models.CASCADE, related_name='classfields')
     name = models.CharField(max_length=255, blank=False,
                             null=False)
 
@@ -61,7 +61,7 @@ class FieldCustom(Field):
     # result möglicherweise nicht unbedingt notwendig!
     #CONSTRAINTS = Choices('required', 'optional', 'result')
 
-    #constraint = models.CharField(
+    # constraint = models.CharField(
     #    choices=CONSTRAINTS, default=CONSTRAINTS.required, max_length=100)
 
 
@@ -84,7 +84,7 @@ class AbstractValue(PolymorphicModel):
     # Problem: ValueNumber benötigt {element, field}, sonst sinnlos (da keinerlei Zugehörigkeit)
 
     class Meta:
-        #abstract = True # could not register with admin, if abstract
+        # abstract = True # could not register with admin, if abstract
         unique_together = ('element', 'field', )
 
     def __str__(self):
@@ -103,10 +103,12 @@ class AbstractValue(PolymorphicModel):
         return { 'fields': query_a }
     '''
 
+
 '''
 class SimpleValue(AbstractValue):
     pass
 '''
+
 
 class ValuePointer(AbstractValue):
     value_reference = models.ForeignKey(
@@ -196,3 +198,64 @@ class ValueString(AbstractValue):
     #values = models.ManyToManyField(Field, through='AbstractValue', through_fields=('job', 'field'))
     class Meta:
             proxy = True """
+
+
+class Property(models.Model):
+    limit = models.Q(app_label='modeldefinition', model__startswith='value') & \
+        ~models.Q(app_label='modeldefinition', model='value')
+
+    name = models.CharField(max_length=255, blank=False,
+                            null=False, unique=True)
+    element = models.ForeignKey(
+        'Element', on_delete=models.CASCADE, related_name='properties')
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE, limit_choices_to=limit)
+    # value
+
+    class Meta:
+        verbose_name_plural = "properties"
+
+
+class Element(models.Model):
+    TYPES = Choices('Namespace', 'Class', 'Object')
+
+    name = models.CharField(max_length=255, blank=False,
+                            null=False, unique=True)
+    model_type = models.CharField(
+        choices=TYPES, default=TYPES.Object, max_length=100)
+    parent = models.ForeignKey(
+        'self', blank=True, null=True, on_delete=models.CASCADE, related_name='children')
+
+    class Meta:
+        ordering = ('name', )
+
+    def __str__(self):
+        if self.parent:
+            return f"{self.name} (Type: {self.model_type}; Parent: {self.parent.name})"
+        return f"{self.name} (Type: {self.model_type})"
+
+
+class Eigenschaft(models.Model):
+    name = models.CharField(max_length=255, blank=False,
+                            null=False, unique=True)
+    element = models.ForeignKey(
+        'Category', on_delete=models.CASCADE, related_name='properties')
+        
+    class Meta:
+        verbose_name_plural = "eigenschaften"
+
+
+from treebeard.mp_tree import MP_Node
+#from relativity.treebeard import MP_Descendants, MP_Subtree
+class Category(MP_Node):
+    name = models.CharField(max_length=30)
+    node_order_by = ['name']
+
+    #descendants = MP_Descendants()
+    #subtree = MP_Subtree()
+
+    def __str__(self):
+        return self.name
+
+# https://django-treebeard.readthedocs.io/en/latest/admin.html
+# https://github.com/alexhill/django-relativity 

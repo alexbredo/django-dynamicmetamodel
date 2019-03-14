@@ -39,7 +39,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'polymorphic',
     'modeldefinition',
-    'ordered_model'
+    'ordered_model',
+    'adminactions',
+    'nested_admin',
+    'treebeard',
+    'relativity'
 ]
 
 MIDDLEWARE = [
