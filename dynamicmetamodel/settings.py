@@ -42,8 +42,7 @@ INSTALLED_APPS = [
     'ordered_model',
     'adminactions',
     'nested_admin',
-    'treebeard',
-    'relativity'
+    'treenode'
 ]
 
 MIDDLEWARE = [
