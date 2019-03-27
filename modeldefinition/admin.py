@@ -55,13 +55,18 @@ class ValueInline(StackedPolymorphicInline):
     class ValueObjectInline(StackedPolymorphicInline.Child):
         model = models.ValueObject
         #form = forms.ValuePointerForm
-        #autocomplete_fields = ['value_reference']
+        autocomplete_fields = ['value']
+        
+    class ValueObjectMultipleInline(StackedPolymorphicInline.Child):
+        model = models.ValueObjectMultiple
+        autocomplete_fields = ['value']
 
     model = models.Property
     child_inlines = (
         ValueNumberInline,
         ValueStringInline,
-        ValueObjectInline
+        ValueObjectInline,
+        ValueObjectMultipleInline
     )
     #formset = ValueInlineFormset
 
@@ -89,6 +94,11 @@ class ValueObjectAdmin(PolymorphicChildModelAdmin):
     #form = forms.ValuePointerForm
     #autocomplete_fields = ['value_reference']
 
+
+@admin.register(models.ValueObjectMultiple)
+class ValueObjectMultipleAdmin(PolymorphicChildModelAdmin):
+    base_model = models.ValueObjectMultiple
+    show_in_index = False
 
 '''
 @admin.register(models.AbstractValue)
@@ -148,20 +158,14 @@ class PropertyInlineAdmin(admin.TabularInline):
 
 @admin.register(models.Element)
 class ElementAdmin(PolymorphicInlineSupportMixin, TreeNodeModelAdmin):  # admin.ModelAdmin
-    treenode_accordion = True 
+    #treenode_accordion = True 
+    treenode_display_mode = TreeNodeModelAdmin.TREENODE_DISPLAY_MODE_ACCORDION
     autocomplete_fields = ['tn_parent']
     list_display = ('id', 'model_type', 'tn_parent', )
     search_fields = ['name', 'tn_parent__name']
     exclude = ('tn_priority', )
     form = TreeNodeForm
     inlines = [ElementInlineAdmin, PropertyReadonlyInlineAdmin, ValueInline] # PropertyInlineAdmin
-
-    def get_search_results(self, request, queryset, search_term):
-        if search_term:
-            ElementAdmin.treenode_accordion = False
-        else:
-            ElementAdmin.treenode_accordion = True
-        return super(ElementAdmin, self).get_search_results(request, queryset, search_term)
 
 
 @admin.register(models.Property)

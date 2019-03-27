@@ -50,6 +50,7 @@ class Property(PolymorphicModel):
 
 
 class ValueObject(Property):
+    # todo: value class can depend on parent selection 
     value_class = models.ForeignKey(
         'Element', on_delete=models.CASCADE, related_name='class_set', limit_choices_to=models.Q(model_type='Class'))
     value = models.ForeignKey(
@@ -59,11 +60,27 @@ class ValueObject(Property):
         return f"{self.value}"
 
 
-class ValueNumber(Property):
-    value = models.FloatField()
+class ValueObjectMultiple(Property):
+    # todo: value class can depend on parent selection 
+    value_class = models.ForeignKey(
+        'Element', on_delete=models.CASCADE, related_name='classes_set', limit_choices_to=models.Q(model_type='Class'))
+    value = models.ManyToManyField(
+        'Element', related_name='objects_set', limit_choices_to=models.Q(model_type='Object'))
 
     def __str__(self):
-        return f"{self.name} = {self.value} ({self.polymorphic_ctype})"
+        return f"{self.value}"
+
+
+class ValueNumber(Property):
+    value = models.FloatField()
+    formatting = models.CharField(max_length=100, default='{:.2f}', blank=False, null=False)
+    
+    def __str__(self):
+        try:
+            value_formatted = self.formatting.format(self.value)
+        except Exception:
+            value_formatted = self.value
+        return f"{self.name} = {value_formatted} ({self.polymorphic_ctype})"
 
 
 class ValueString(Property):
@@ -94,6 +111,16 @@ class Element(TreeNodeModel):
 
 '''
 Notes:
+
+TREE
  - Why not Treebeared: parent field can not be used as autocomplete field (field not in db), AL_Node has parent, but UI very poor
  - Why not django-MPTT: Draggable Admin only for < 1000 items. Cannot close unneccessary nodes. UI primitive, but functional.
+
+Dependent / chained fields:
+ - https://django-selectable.readthedocs.io/en/latest/advanced.html#chained-selection
+ - https://github.com/applecat/django-smart-selects (fork, releases in pip not current?)
+ - https://django-autocomplete-light.readthedocs.io/en/master/
+ - https://django-select2.readthedocs.io/en/latest/extra.html 
+ - Consider https://djangopackages.org/grids/g/auto-complete/
 '''
+
